@@ -19,7 +19,7 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout contentFrameLayout;
 
     private float CONST_SPEED_LIMIT = 20;
-    private float CONST_PREDICTION_SECOND = 3;
+    private float CONST_PREDICTION_SECOND = 6;
 
     //The following is temp data, will be deleted one hooked up to sensor
     private float TEMP_CURRENT_SPEED = 10;
@@ -70,52 +70,48 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    private float checkCurrentSpeed() {
+    private float getCurrentSpeed() {
         return TEMP_CURRENT_SPEED;
     }
 
-    private float checkCurrentAcceleration() {
+    private float getCurrentAcceleration() {
         return TEMP_CURRENT_ACCELERATION;
     }
 
-    private float checkCurrentSpeedLimit() {
+    private float getCurrentSpeedLimit() {
         return CONST_SPEED_LIMIT;
     }
 
     private boolean isSpeeding() {
-        if (checkCurrentSpeed() > checkCurrentSpeedLimit()) {
+        if (getCurrentSpeed() > getCurrentSpeedLimit()) {
             return true;
         } else {
             return false;
         }
     }
 
-    private boolean willBeSpeeding() {
-        //Assume we're prediction future speed in 6 seconds
-
-        float currentSpeed = checkCurrentSpeed();
-        float acceleration = checkCurrentAcceleration();
-        float predictedFutureSpeed = currentSpeed + 6 * acceleration;
-
-        if (predictedFutureSpeed > checkCurrentSpeedLimit()) {
-            return true;
-        } else {
-            return false;
-        }
-    }
+//    private boolean willBeSpeeding() {
+//        //Assume we're prediction future speed in 6 seconds
+//
+//        float currentSpeed = getCurrentSpeed();
+//        float acceleration = getCurrentAcceleration();
+//        float predictedFutureSpeed = currentSpeed + 6 * acceleration;
+//
+//        if (predictedFutureSpeed > getCurrentSpeedLimit()) {
+//            return true;
+//        } else {
+//            return false;
+//        }
+//    }
 
     private boolean willBeSpeedingInSeconds(float seconds) {
         //Assume we're prediction future speed in 6 seconds
 
-        float currentSpeed = checkCurrentSpeed();
-        float acceleration = checkCurrentAcceleration();
+        float currentSpeed = getCurrentSpeed();
+        float acceleration = getCurrentAcceleration();
         float predictedFutureSpeed = currentSpeed + seconds * acceleration;
 
-        if (predictedFutureSpeed > checkCurrentSpeedLimit()) {
-            return true;
-        } else {
-            return false;
-        }
+        return predictedFutureSpeed > getCurrentSpeedLimit();
     }
 
     private void updateViews() {
@@ -151,10 +147,12 @@ public class MainActivity extends AppCompatActivity {
             mTextMessage.setText("You will NOT be speeding in " + CONST_PREDICTION_SECOND + " seconds!");
         }
 
-        speedLimitTextView.setText("Limit: " + checkCurrentSpeedLimit() + " km/h");
-        currentSpeedTextView.setText("Current: " + checkCurrentSpeed() + " km/h");
-        accelerationTextView.setText("Acc: " + checkCurrentAcceleration() + " km/h/s");
+        speedLimitTextView.setText("Limit: " + getCurrentSpeedLimit() + " km/h");
+        currentSpeedTextView.setText("Current: " + getCurrentSpeed() + " km/h");
+        accelerationTextView.setText("Acc: " + getCurrentAcceleration() + " km/h/s");
 
     }
 
+    // TODO: Implement 'fetch data from sensor'
+    // @doc: https://stackoverflow.com/questions/20398898/how-to-get-speed-in-android-app-using-location-or-accelerometer-or-some-other-wa
 }
