@@ -4,6 +4,10 @@ import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -13,13 +17,16 @@ import android.support.annotation.NonNull;
 import android.support.design.widget.BottomNavigationView;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
+import android.text.format.Time;
 import android.util.Log;
 import android.view.MenuItem;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
-public class MainActivity extends AppCompatActivity implements LocationListener {
+import java.util.concurrent.TimeUnit;
+
+public class MainActivity extends AppCompatActivity implements LocationListener, SensorEventListener {
     private TextView mTextMessage;
     private TextView speedLimitTextView;
     private TextView currentSpeedTextView;
@@ -27,17 +34,28 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
     private LinearLayout contentFrameLayout;
 
-    private float CONST_SPEED_LIMIT = 20;
+    private int selectedTab = 0;
+
+    private float CONST_SPEED_LIMIT = 15;
     private float CONST_PREDICTION_SECOND = 6;
+
+    private float CURRENT_SPEED = 0;
+    private float CURRENT_ACCELERATION = 0;
+    private Time CURRENT_TIME = new Time();
+    private float accX;
+    private float accY;
+    private float accZ;
+    private long lastEvent;
+    private long deltaT;
+    private float Vx;
+    private float Vy;
+    private float Vz;
 
     private long CONST_MINIMAL_UPDATE_TIME_INTERVAL = 1000;
     private long CONST_MINIMAL_UPDATE_DISTANCE_INTERVAL = 0;
 
     private static final int MY_PERMISSIONS_REQUEST_ACCESS_FINE_LOCATOIN = 67;
 
-    //The following is temp data, will be deleted one hooked up to sensor
-    private float TEMP_CURRENT_SPEED = 10;
-    private float TEMP_CURRENT_ACCELERATION = 2;
 
     private BottomNavigationView.OnNavigationItemSelectedListener mOnNavigationItemSelectedListener
             = new BottomNavigationView.OnNavigationItemSelectedListener() {
@@ -47,34 +65,20 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             switch (item.getItemId()) {
                 case R.id.navigation_one:
 
+                    selectedTab = 0;
                     updateViews();
 
                     return true;
                 case R.id.navigation_two:
 
-                    mTextMessage.setText(R.string.title_second);
-
-                    contentFrameLayout.setBackgroundColor(Color.GREEN);
+                    selectedTab = 1;
+                    updateViews();
 
                     return true;
                 case R.id.navigation_three:
 
-                    // Update Background Color
-                    contentFrameLayout.setBackgroundColor(Color.WHITE);
-
-                    // Update Text Color
-                    mTextMessage.setTextColor(Color.BLACK);
-                    speedLimitTextView.setTextColor(Color.BLACK);
-                    currentSpeedTextView.setTextColor(Color.BLACK);
-                    accelerationTextView.setTextColor(Color.BLACK);
-
-
-                    // Update texts
-                    mTextMessage.setText(R.string.welcome_text);
-
-                    speedLimitTextView.setText(R.string.subtitle_one);
-                    currentSpeedTextView.setText(R.string.subtitle_two);
-                    accelerationTextView.setText(R.string.subtitle_three);
+                    selectedTab = 2;
+                    updateViews();
 
                     return true;
             }
@@ -96,6 +100,12 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
         navigation.setOnNavigationItemSelectedListener(mOnNavigationItemSelectedListener);
 
         contentFrameLayout = (LinearLayout) this.findViewById(R.id.container);
+
+        // Reset current values;
+        CURRENT_SPEED = 0;
+        CURRENT_ACCELERATION = 0;
+        Time currentTime = new Time();
+        currentTime.setToNow();
 
         //Update texts
         mTextMessage.setText(R.string.welcome_text);
@@ -135,11 +145,19 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
             Toast.makeText(this, "Please grant this app permission to use GPS in Settings", Toast.LENGTH_LONG).show();
             return;
         }
+
+        // Listens to LocationManager for Speed
         LocationManager locationManager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
         locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, CONST_MINIMAL_UPDATE_TIME_INTERVAL, CONST_MINIMAL_UPDATE_DISTANCE_INTERVAL, this);
+        locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, CONST_MINIMAL_UPDATE_TIME_INTERVAL, CONST_MINIMAL_UPDATE_DISTANCE_INTERVAL, this);
 
+        // Listens to SensorManager for acceleration
+        SensorManager mSensorManager = (SensorManager)getSystemService(SENSOR_SERVICE);
+        Sensor mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        mSensorManager.registerListener(this, mAccelerometer, SensorManager.SENSOR_DELAY_NORMAL);
     }
 
+    @SuppressWarnings("MissingPermission")
     @Override
     public void onRequestPermissionsResult(int requestCode,
                                            String permissions[], int[] grantResults) {
@@ -154,8 +172,8 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
                     Toast.makeText(this, "Thank you! Let's get started!", Toast.LENGTH_SHORT).show();
                     LocationManager locationManager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
-                    //noinspection MissingPermission
                     locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, CONST_MINIMAL_UPDATE_TIME_INTERVAL, CONST_MINIMAL_UPDATE_DISTANCE_INTERVAL, this);
+                    locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, CONST_MINIMAL_UPDATE_TIME_INTERVAL, CONST_MINIMAL_UPDATE_DISTANCE_INTERVAL, this);
 
                 } else {
 
@@ -173,11 +191,11 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     }
 
     private float getCurrentSpeed() {
-        return TEMP_CURRENT_SPEED;
+        return CURRENT_SPEED;
     }
 
     private float getCurrentAcceleration() {
-        return TEMP_CURRENT_ACCELERATION;
+        return CURRENT_ACCELERATION;
     }
 
     private float getCurrentSpeedLimit() {
@@ -211,47 +229,136 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
 
         float currentSpeed = getCurrentSpeed();
         float acceleration = getCurrentAcceleration();
-        float predictedFutureSpeed = currentSpeed + seconds * acceleration;
+//        if (acceleration >= 2000) {
+//            // This case, acceleration is more than 2000 km/h/s, a rocket? haha
+//            // This is a result of initial acceleration, no need to worry.
+//            return false;
+//        } else {
+            // This is real meaningful acceleration
+            float predictedFutureSpeed = currentSpeed + seconds * acceleration;
+            return predictedFutureSpeed > getCurrentSpeedLimit();
+//        }
 
-        return predictedFutureSpeed > getCurrentSpeedLimit();
     }
 
     private void updateViews() {
 
-        if (isSpeeding()) {
+        if (selectedTab == 0) {
+            if (isSpeeding()) {
 
-            contentFrameLayout.setBackgroundColor(Color.RED);
+                contentFrameLayout.setBackgroundColor(Color.RED);
 
-            mTextMessage.setTextColor(Color.WHITE);
-            speedLimitTextView.setTextColor(Color.WHITE);
-            currentSpeedTextView.setTextColor(Color.WHITE);
-            accelerationTextView.setTextColor(Color.WHITE);
-            mTextMessage.setText(R.string.already_speeding_notification);
+                mTextMessage.setTextColor(Color.WHITE);
+                speedLimitTextView.setTextColor(Color.WHITE);
+                currentSpeedTextView.setTextColor(Color.WHITE);
+                accelerationTextView.setTextColor(Color.WHITE);
+                mTextMessage.setText(R.string.already_speeding_notification);
 
-        } else if (willBeSpeedingInSeconds(CONST_PREDICTION_SECOND)) {
+            } else if (willBeSpeedingInSeconds(CONST_PREDICTION_SECOND)) {
 
-            contentFrameLayout.setBackgroundColor(Color.RED);
+                contentFrameLayout.setBackgroundColor(Color.RED);
 
-            mTextMessage.setTextColor(Color.WHITE);
-            speedLimitTextView.setTextColor(Color.WHITE);
-            currentSpeedTextView.setTextColor(Color.WHITE);
-            accelerationTextView.setTextColor(Color.WHITE);
-            mTextMessage.setText("You will be speeding in " + CONST_PREDICTION_SECOND + " seconds!");
+                mTextMessage.setTextColor(Color.WHITE);
+                speedLimitTextView.setTextColor(Color.WHITE);
+                currentSpeedTextView.setTextColor(Color.WHITE);
+                accelerationTextView.setTextColor(Color.WHITE);
+                mTextMessage.setText("You will be speeding in " + CONST_PREDICTION_SECOND + " seconds!");
 
-        } else {
+            } else {
 
+                contentFrameLayout.setBackgroundColor(Color.WHITE);
+
+                mTextMessage.setTextColor(Color.BLACK);
+                speedLimitTextView.setTextColor(Color.BLACK);
+                currentSpeedTextView.setTextColor(Color.BLACK);
+                accelerationTextView.setTextColor(Color.BLACK);
+                mTextMessage.setText("You will NOT be speeding in " + CONST_PREDICTION_SECOND + " seconds!");
+            }
+
+            speedLimitTextView.setText("Limit: " + getCurrentSpeedLimit() + " km/h");
+            String currentSpeed = String.format("%.1f", getCurrentSpeed()) + " km/h";
+            currentSpeedTextView.setText("Current: " + currentSpeed);
+            String currentAcc = String.format("%.1f", getCurrentAcceleration()) + " km/h/s";
+            accelerationTextView.setText("Acc: " + currentAcc);
+        } else if (selectedTab == 1) {
+            if (isSpeeding()) {
+
+                contentFrameLayout.setBackgroundColor(Color.RED);
+
+                mTextMessage.setTextColor(Color.WHITE);
+                speedLimitTextView.setTextColor(Color.WHITE);
+                currentSpeedTextView.setTextColor(Color.WHITE);
+                accelerationTextView.setTextColor(Color.WHITE);
+                mTextMessage.setText(R.string.already_speeding_notification);
+
+            } else if (willBeSpeedingInSeconds(CONST_PREDICTION_SECOND)) {
+
+                contentFrameLayout.setBackgroundColor(Color.RED);
+
+                mTextMessage.setTextColor(Color.WHITE);
+                speedLimitTextView.setTextColor(Color.WHITE);
+                currentSpeedTextView.setTextColor(Color.WHITE);
+                accelerationTextView.setTextColor(Color.WHITE);
+                mTextMessage.setText("You will be speeding in " + CONST_PREDICTION_SECOND + " seconds!");
+
+            } else {
+
+                //Assume we're prediction future speed in 6 seconds
+
+                float currentSpeed = getCurrentSpeed();
+                float acceleration = getCurrentAcceleration();
+
+                float speedToSpeeding = getCurrentSpeedLimit() - currentSpeed;
+                if (speedToSpeeding < 3) {
+                    mTextMessage.setText("You are about to speeding in " + CONST_PREDICTION_SECOND + " seconds!");
+                    contentFrameLayout.setBackgroundColor(Color.RED);
+
+                    mTextMessage.setTextColor(Color.WHITE);
+                    speedLimitTextView.setTextColor(Color.WHITE);
+                    currentSpeedTextView.setTextColor(Color.WHITE);
+                    accelerationTextView.setTextColor(Color.WHITE);
+                } else if (speedToSpeeding < 5) {
+                    mTextMessage.setText("You are likely to be speeding in " + CONST_PREDICTION_SECOND + " seconds!");
+                    contentFrameLayout.setBackgroundColor(Color.YELLOW);
+
+                    mTextMessage.setTextColor(Color.WHITE);
+                    speedLimitTextView.setTextColor(Color.WHITE);
+                    currentSpeedTextView.setTextColor(Color.WHITE);
+                    accelerationTextView.setTextColor(Color.WHITE);
+                } else {
+                    mTextMessage.setText("You are good, not likely to be speed in " + CONST_PREDICTION_SECOND + " seconds!");
+                    contentFrameLayout.setBackgroundColor(Color.WHITE);
+
+                    mTextMessage.setTextColor(Color.BLACK);
+                    speedLimitTextView.setTextColor(Color.BLACK);
+                    currentSpeedTextView.setTextColor(Color.BLACK);
+                    accelerationTextView.setTextColor(Color.BLACK);
+                }
+            }
+
+            speedLimitTextView.setText("Limit: " + getCurrentSpeedLimit() + " km/h");
+            String currentSpeed = String.format("%.1f", getCurrentSpeed()) + " km/h";
+            currentSpeedTextView.setText("Current: " + currentSpeed);
+            String currentAcc = String.format("%.1f", getCurrentAcceleration()) + " km/h/s";
+            accelerationTextView.setText("Acc: " + currentAcc);
+        } else if (selectedTab == 2) {
+            // Update Background Color
             contentFrameLayout.setBackgroundColor(Color.WHITE);
 
+            // Update Text Color
             mTextMessage.setTextColor(Color.BLACK);
             speedLimitTextView.setTextColor(Color.BLACK);
             currentSpeedTextView.setTextColor(Color.BLACK);
             accelerationTextView.setTextColor(Color.BLACK);
-            mTextMessage.setText("You will NOT be speeding in " + CONST_PREDICTION_SECOND + " seconds!");
-        }
 
-        speedLimitTextView.setText("Limit: " + getCurrentSpeedLimit() + " km/h");
-        currentSpeedTextView.setText("Current: " + getCurrentSpeed() + " km/h");
-        accelerationTextView.setText("Acc: " + getCurrentAcceleration() + " km/h/s");
+
+            // Update texts
+            mTextMessage.setText(R.string.welcome_text);
+
+            speedLimitTextView.setText(R.string.subtitle_one);
+            currentSpeedTextView.setText(R.string.subtitle_two);
+            accelerationTextView.setText(R.string.subtitle_three);
+        }
 
     }
 
@@ -264,7 +371,34 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
      */
     @Override
     public void onLocationChanged(Location location) {
-        Toast.makeText(this, "onLocationChanged: " + location.getSpeed(), Toast.LENGTH_SHORT).show();
+
+        float PREVIOUS_SPEED = CURRENT_SPEED;
+        Time previousTime = CURRENT_TIME;
+
+        // Converting unit from meter/second to km/h
+        float meterPerSecondSpeed = location.getSpeed();
+        float meterPerHourSpeed = meterPerSecondSpeed * 60 * 60;
+        float kmPerHourSpeed = meterPerHourSpeed / 1000;
+        CURRENT_SPEED = kmPerHourSpeed;
+
+        //Computation for acceleration based on locaiton
+        Time currentTime = new Time();
+        currentTime.setToNow();
+        float differenceOfSpeedInKmPerHour = CURRENT_SPEED - PREVIOUS_SPEED;
+        float differenceOfTimeInSecond = TimeUnit.MILLISECONDS.toSeconds(currentTime.toMillis(true)-previousTime.toMillis(true));
+        float differenceOfTimeInMinute = differenceOfTimeInSecond / 60;
+        float differenceOfTimeInHour = differenceOfTimeInMinute / 60;
+        CURRENT_TIME = currentTime;
+        CURRENT_ACCELERATION = differenceOfSpeedInKmPerHour / differenceOfTimeInSecond;
+
+//        Toast.makeText(this, "Difference in seconds: " + differenceOfTimeInSecond, Toast.LENGTH_LONG).show();
+
+
+//        Toast.makeText(this, "Provider: " + location.getProvider()
+//                + ", \nSpeed: " + CURRENT_SPEED + "km/h"
+//                + ", \nAcc: " + CURRENT_ACCELERATION + "km/h/s", Toast.LENGTH_LONG).show();
+
+        updateViews();
     }
 
     /**
@@ -318,6 +452,57 @@ public class MainActivity extends AppCompatActivity implements LocationListener 
     @Override
     public void onProviderDisabled(String provider) {
         if (BuildConfig.DEBUG) Log.d("MainActivity", "LocationProvider Disabled");
+    }
+
+    /**
+     * Called when there is a new sensor event.  Note that "on changed"
+     * is somewhat of a misnomer, as this will also be called if we have a
+     * new reading from a sensor with the exact same sensor values (but a
+     * newer timestamp).
+     * <p>
+     * <p>See {@link SensorManager SensorManager}
+     * for details on possible sensor types.
+     * <p>See also {@link SensorEvent SensorEvent}.
+     * <p>
+     * <p><b>NOTE:</b> The application doesn't own the
+     * {@link SensorEvent event}
+     * object passed as a parameter and therefore cannot hold on to it.
+     * The object may be part of an internal pool and may be reused by
+     * the framework.
+     *
+     * @param event the {@link SensorEvent SensorEvent}.
+     */
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+
+        accX = event.values[SensorManager.DATA_X];
+        accY = event.values[SensorManager.DATA_Y];
+        accZ = event.values[SensorManager.DATA_Z];
+        long now = System.currentTimeMillis();
+        deltaT = now - lastEvent;
+        lastEvent = now;
+
+        // calculate velocity in 3D by using 3D acceleration
+        Vx = Vx + deltaT * accX;
+        Vy = Vy + deltaT * accX;
+        Vz = Vz + deltaT * accX;
+
+    }
+
+    /**
+     * Called when the accuracy of the registered sensor has changed.  Unlike
+     * onSensorChanged(), this is only called when this accuracy value changes.
+     * <p>
+     * <p>See the SENSOR_STATUS_* constants in
+     * {@link SensorManager SensorManager} for details.
+     *
+     * @param sensor
+     * @param accuracy The new accuracy of this sensor, one of
+     *                 {@code SensorManager.SENSOR_STATUS_*}
+     */
+    @Override
+    public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        if (BuildConfig.DEBUG) Log.d("MainActivity", "Acc sensor accuracy changed: ");
     }
 
     // TODO: Implement 'fetch data from sensor'
