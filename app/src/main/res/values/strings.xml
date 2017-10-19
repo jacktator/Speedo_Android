@@ -1,7 +1,12 @@
 <resources>
     <string name="app_name">Speedo</string>
-    <string name="title_home">Home</string>
-    <string name="title_dashboard">Dashboard</string>
-    <string name="title_notifications">Notifications</string>
+    <string name="title_first">First</string>
+    <string name="title_second">Second</string>
+    <string name="title_three">About</string>
     <string name="already_speeding_notification">You will be speeding!</string>
+    <string name="placeholder_text">Placeholder Text</string>
+    <string name="welcome_text">Hello, Welcome to Speedo</string>
+    <string name="subtitle_one">Research Report Prototype</string>
+    <string name="subtitle_two">For Helen and Rinta</string>
+    <string name="subtitle_three">Group: #14  hah</string>
 </resources>
