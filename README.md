@@ -16,8 +16,9 @@ You will need an Android phone with following specifications.
 2. Install gradle dependencies
 3. Click 'Run'.
 
-## If not, you can find the installation file name **app-debug.apk** file in the **/app/build/outputs/apk** directory.
+## If not, you can install the Android App by installation file,
 
+1. Download from [Github Repository](https://github.com/jacktator/Speedo_Android/tree/master/app/build/outputs/apk).
 1. Transfer apk file to your Android device via cable or download.
 1. Install the app by clicking the downloaded apk file.
 
