@@ -291,16 +291,6 @@ public class MainActivity extends AppCompatActivity implements LocationListener,
                 accelerationTextView.setTextColor(Color.WHITE);
                 mTextMessage.setText(R.string.already_speeding_notification);
 
-            } else if (willBeSpeedingInSeconds(CONST_PREDICTION_SECOND)) {
-
-                contentFrameLayout.setBackgroundColor(Color.RED);
-
-                mTextMessage.setTextColor(Color.WHITE);
-                speedLimitTextView.setTextColor(Color.WHITE);
-                currentSpeedTextView.setTextColor(Color.WHITE);
-                accelerationTextView.setTextColor(Color.WHITE);
-                mTextMessage.setText("You will be speeding in " + CONST_PREDICTION_SECOND + " seconds!");
-
             } else {
 
                 //Assume we're prediction future speed in 6 seconds
