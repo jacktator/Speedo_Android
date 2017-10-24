@@ -309,7 +309,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener,
                 float acceleration = getCurrentAcceleration();
 
                 float speedToSpeeding = getCurrentSpeedLimit() - currentSpeed;
-                if (speedToSpeeding < 3) {
+                if (speedToSpeeding < getCurrentSpeedLimit() * 0.05) {
                     mTextMessage.setText("You are about to speeding in " + CONST_PREDICTION_SECOND + " seconds!");
                     contentFrameLayout.setBackgroundColor(Color.RED);
 
@@ -317,7 +317,7 @@ public class MainActivity extends AppCompatActivity implements LocationListener,
                     speedLimitTextView.setTextColor(Color.WHITE);
                     currentSpeedTextView.setTextColor(Color.WHITE);
                     accelerationTextView.setTextColor(Color.WHITE);
-                } else if (speedToSpeeding < 5) {
+                } else if (speedToSpeeding < getCurrentSpeedLimit() * 0.10) {
                     mTextMessage.setText("You are likely to be speeding in " + CONST_PREDICTION_SECOND + " seconds!");
                     contentFrameLayout.setBackgroundColor(Color.YELLOW);
 
